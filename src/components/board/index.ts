@@ -1,6 +1,7 @@
 import { Stream } from 'xstream'
 import dropRepeats from 'xstream/extra/dropRepeats'
-import { div, p, a, section, button, DOMSource } from '@cycle/dom'
+import debounce from 'xstream/extra/debounce'
+import { div, p, textarea, section, button, DOMSource } from '@cycle/dom'
 import isolate from '@cycle/isolate'
 import * as R from 'ramda'
 import createEventHandler from '../../util/create-event-handler'
@@ -26,7 +27,8 @@ interface State {
   boards: {
     [id: string]: Board
   }
-  notes: NoteMap
+  notes: NoteMap,
+  editingNodeId: string
 }
 
 interface Sources { 
@@ -39,19 +41,25 @@ interface NoteEvent {
   y: number
 }
 
+const INITIAL_NOTE_POS = {
+  x: 115, 
+  y: 425
+}
+
 const initialState : State = {
   boards: {
-    0: { name: 'Backlog' },
-    1: { name: 'Doing' }, 
-    2: { name: 'Done' }
+    0: { name: 'Winds' },
+    1: { name: 'Anchors' }, 
+    2: { name: 'Action Items' }
   },
   notes: {
     1: {
       pos: { x: 100, y: 100 }, 
-      label: 'asdf', 
+      label: 'Unidirectional Dataflow!', 
       id: '1'
     }
-  }
+  },
+  editingNodeId: null
 }
 
 const boardStyle = {
@@ -85,16 +93,47 @@ const getNextNoteId = R.pipe
   (id) => (parseInt(id, 10) + 1).toString()
 )
 
+const stopPropagation = (e: MouseEvent) => {
+  e.stopPropagation()
+}
+
 function Board(sources: Sources) {
-  const { 
-    stream: noteMouseDown$, 
-    handler: onNoteMouseDown 
-  } = createEventHandler<NoteEvent>()
+  const {
+    stream: noteEditStart$,
+    handler: onNoteEditStart
+  } = createEventHandler<string>()
   
-  const mouseMove$ = sources.DOM.select('.js-container')
+  const container = sources.DOM.select('.js-container')
+  
+  const noteEditArea = container.select('.js-note-edit')
+  
+  const noteMouseDown$: Stream<NoteEvent> = (container.select('.js-note')
+    .events('mousedown') as Stream<MouseEvent>).map((e) => {
+      return {
+        id: (e.currentTarget as Element).getAttribute('data-note'),
+        x: e.clientX,
+        y: e.clientY
+      }
+    })
+  
+  const mouseMove$ = container
     .events('mousemove') as Stream<MouseEvent>
-  const mouseUp$ = sources.DOM.select('.js-container')
+  const mouseUp$ = container
     .events('mouseup') as Stream<MouseEvent>
+   
+  const noteEditBlur$ = noteEditArea
+    .events('blur') as Stream<Event>
+  
+  const noteSaveText$ = noteEditBlur$
+    .map(e => ({
+      noteId: (e.target as HTMLTextAreaElement).getAttribute('data-note'),
+      text: (e.target as HTMLTextAreaElement).value
+    }))
+    .filter(({ noteId }) => noteId !== null && noteId.length > 0)
+   
+  const finishEdit$ = Stream.merge(
+    container.events('click'), noteEditBlur$
+  ).compose(debounce(20))
   
   const addNote$ = sources.DOM.select('.js-add-note')
     .events('click') as Stream<MouseEvent>
@@ -104,7 +143,7 @@ function Board(sources: Sources) {
     
     const update = R.set(
       R.lensPath(['notes', newId]),
-      { id: newId, pos: { x: 0, y: 0 }, label: '...' } as Note
+      { id: newId, pos: INITIAL_NOTE_POS, label: '' } as Note
     )
     
     return update(state)
@@ -113,8 +152,8 @@ function Board(sources: Sources) {
   const noteDrag$ = noteMouseDown$.map(({ id }) => 
     mouseMove$.map(e => ({
       id: id,
-      x: e.clientX,
-      y: e.clientY
+      x: e.clientX - 30,
+      y: e.clientY - 30
     }))
     .compose(dropRepeats((a: any, b: any) => 
       a.x === b.x && a.y === b.y
@@ -130,9 +169,30 @@ function Board(sources: Sources) {
     return update(state)
   })
   
-  const mod$ = Stream.merge(noteDragMod$, addNoteMod$)
+  const noteEditId$ = Stream.merge(noteEditStart$, finishEdit$.mapTo(null))
+  
+  const noteEditStartMod$ = noteEditId$.map(id => (state: State) => {
+    if (state.editingNodeId === id) {
+      return state
+    }
+    return R.assoc('editingNodeId', id, state) as State
+  })
+  
+  const noteSaveTextMod$ = noteSaveText$.map(({ noteId, text }) => 
+    (state: State) => {
+      const update = R.set(
+        R.lensPath(['notes', noteId, 'label']),
+        text
+      )
+      return update(state)
+    })
+  
+  const mod$ = Stream.merge(
+    noteDragMod$, addNoteMod$, noteEditStartMod$, noteSaveTextMod$
+  )
   
   const state$ = mod$.fold((state, mod) => mod(state), initialState)
+    .compose(dropRepeats<State>())
     .debug('state$')
 
   const view$ = state$.map(state => section('.js-container.p1', [ 
@@ -146,31 +206,43 @@ function Board(sources: Sources) {
       )
     ),
     
-    div('.border.p1', [
+    div('.p1', [
       button('.js-add-note', [ 'Add a note' ])
     ]),
     
     ...R.values(state.notes).map(note => 
       div('.js-note.border', { 
         style: noteStyle(note),
-        props: {
-          onmousedown: (ev: MouseEvent) => onNoteMouseDown({
-            id: note.id,
-            x: ev.clientX,
-            y: ev.clientY
-          })
-        }
+        attrs: { 'data-note': note.id },
       }, [ 
-        note.label,
-        a([ 'edit' ])
+        state.editingNodeId === note.id ? 
+          textarea('.js-note-edit', { 
+            attrs: { autofocus: true, 'data-note': note.id },
+            props: { onclick: stopPropagation }
+          }, [note.label]) 
+        : 
+          div([
+            note.label,
+            button({
+              props: {
+                onmousedown: stopPropagation,
+                onclick: (e) => {
+                  e.stopPropagation()
+                  onNoteEditStart(note.id)
+                }  
+              }
+            }, [ 'edit' ])
+          ]),
       ])
     ) 
       
   ]))
   
+  const dragNoteEvent$ = mouseMove$.map(e => noteDrag$.mapTo(e)).flatten()
+  
   return {
     DOM: view$,
-    preventDefault: mouseMove$.map(e => noteDrag$.mapTo(e)).flatten()
+    preventDefault: dragNoteEvent$
   }
 }
 
