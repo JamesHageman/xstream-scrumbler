@@ -9,7 +9,7 @@ const StyleLintPlugin = require('stylelint-webpack-plugin');
 const SplitByPathPlugin = require('webpack-split-by-path');
 
 const baseAppEntries = [
-  './src/index.tsx',
+  './src/index.ts',
 ];
 
 const devAppEntries = [
@@ -109,7 +109,7 @@ module.exports = {
       loaders.tslint,
     ],
     loaders: [
-      loaders.tsx,
+      loaders.ts,
       loaders.html,
       loaders.css,
       loaders.svg,

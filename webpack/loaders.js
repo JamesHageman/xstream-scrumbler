@@ -1,13 +1,13 @@
 'use strict';
 
 exports.tslint = {
-  test: /\.tsx?$/,
+  test: /\.ts?$/,
   loader: 'tslint',
   exclude: /node_modules/,
 };
 
-exports.tsx = {
-  test: /\.(tsx|ts)?$/,
+exports.ts = {
+  test: /\.ts?$/,
   loader: 'ts',
   exclude: /(node_modules|test-utils|\.test\.ts$)/,
 };

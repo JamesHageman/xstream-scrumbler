@@ -7,6 +7,7 @@
     "es6": "github:typed-contrib/es2015/collections/typings.json#0.1.3",
     "mocha": "registry:dt/mocha#2.2.5+20160317120654",
     "node": "registry:dt/node#6.0.0+20160524002506",
+    "ramda": "github:donnut/typescript-ramda/global#21164bfa6e9a9fde3111c0a96c691ff326d72fad",
     "react": "registry:dt/react#0.14.0+20160526134601",
     "react-dom": "registry:dt/react-dom#0.14.0+20160412154040",
     "sinon": "registry:dt/sinon#1.16.0+20160517064723",
