@@ -20,13 +20,18 @@ let users;
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-authPassport.readUsers()
-  .then( (_users) => {
-    users = _users;
-  })
-  .catch( (err) => {
-    throw err;
-  });
+const server = require('http').Server(app);
+const io = require('socket.io')(server);
+
+io.on('connection', require('./websocket').controller(io))
+
+// authPassport.readUsers()
+//   .then( (_users) => {
+//     users = _users;
+//   })
+//   .catch( (err) => {
+//     throw err;
+//   });
 
 // Enable various security helpers.
 app.use(helmet());
@@ -35,36 +40,36 @@ app.use(helmet());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-app.use(passport.initialize());
-app.use(passport.session());
+// app.use(passport.initialize());
+// app.use(passport.session());
 
-passport.use(new LocalStrategy(
-  (username, password, done) => {
-    authPassport.authenticateUser(username, password, users)
-    .then( (authResult) => {
-      return done(null, authResult);
-    })
-    .then(null, (message) => {
-      return done(null, false, message);
-    });
-  }
+// passport.use(new LocalStrategy(
+//   (username, password, done) => {
+//     authPassport.authenticateUser(username, password, users)
+//     .then( (authResult) => {
+//       return done(null, authResult);
+//     })
+//     .then(null, (message) => {
+//       return done(null, false, message);
+//     });
+//   }
 
-));
+// ));
 
-passport.serializeUser( (user, done) => {
-  done(null, user.meta.id);
-});
+// passport.serializeUser( (user, done) => {
+//   done(null, user.meta.id);
+// });
 
-passport.deserializeUser( (id, done) => {
-  done(null, authPassport.getUserById(id, users));
-});
+// passport.deserializeUser( (id, done) => {
+//   done(null, authPassport.getUserById(id, users));
+// });
 
-app.post('/api/auth/login',
-  passport.authenticate('local'),
-  (req, res) => {
-    res.status(200).send(JSON.stringify(req.user));
-  }
-);
+// app.post('/api/auth/login',
+//   passport.authenticate('local'),
+//   (req, res) => {
+//     res.status(200).send(JSON.stringify(req.user));
+//   }
+// );
 
 
 // API proxy logic: if you need to talk to a remote server from your client-side
@@ -75,7 +80,7 @@ nodeProxy(app);
 nodeAppServer(app);
 
 // Start up the server.
-app.listen(PORT, (err) => {
+server.listen(PORT, (err) => {
   if (err) {
     winston.error(err);
     return;
