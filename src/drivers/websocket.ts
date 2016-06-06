@@ -1,9 +1,9 @@
 import { Stream, Producer } from 'xstream'
 import io = require('socket.io-client')
 
-interface EmitMessage {
+export interface EmitMessage {
   type: string
-  data: any
+  data?: any
 }
 
 interface IncomingMessage {

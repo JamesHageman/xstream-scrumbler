@@ -1,22 +1,44 @@
 import './styles/index.css'
-import { makeDOMDriver, DOMSource } from '@cycle/dom'
+import { makeDOMDriver, DOMSource, VNode } from '@cycle/dom'
 import Cycle from '@cycle/xstream-run'
 import Board from './components/board'
+import { BootstrapMessage } from './components/board/types'
 import { Stream } from 'xstream'
 import isolate from '@cycle/isolate'
-import { createWebsocketDriver, WebsocketSource } from './drivers/websocket' 
+import { 
+  createWebsocketDriver, 
+  WebsocketSource, 
+  EmitMessage 
+} from './drivers/websocket' 
 
 interface Sources { 
   DOM: DOMSource, 
   websocket: WebsocketSource 
 }
 
-function main(sources: Sources) {
-  const board = isolate(Board)(sources)
+interface Sinks {
+  DOM: Stream<VNode>
+  websocket: Stream<EmitMessage>
+  preventDefault: Stream<Event>
+}
+
+function main(sources: Sources): Sinks {
+  const stateUpdate$ = sources.websocket.get('state-update')
+    .map(msg => msg.data as BootstrapMessage)
+  const board = isolate(Board)(sources, stateUpdate$)
+  
+  const boardWebsocket$ = Stream.merge(
+    board.moveNote$.map(noteEvent => ({
+      type: 'move-note',
+      data: noteEvent,
+    })),
+    board.addNote$.mapTo({ type: 'add-note' })
+  )
   
   return {
     DOM: board.DOM,
-    websocket: Stream.merge(board.websocket, Stream.of({ type: 'init' })),
+    websocket: Stream.merge(boardWebsocket$, Stream.of({ type: 'init' }))
+      .debug('websocket$'),
     preventDefault: board.preventDefault
   }
 }

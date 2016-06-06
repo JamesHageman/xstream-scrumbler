@@ -5,7 +5,7 @@ import { DOMSource } from '@cycle/dom'
 import * as R from 'ramda'
 import createEventHandler from '../../util/create-event-handler'
 import { WebsocketSource } from '../../drivers/websocket' 
-import { Board, Position, Note, NoteMap, BootstrapMessage, State, NoteEvent } 
+import { Position, Note, NoteMap, BootstrapMessage, State, NoteEvent } 
   from './types'
 import { view } from './view'
   
@@ -34,7 +34,8 @@ const getNextNoteId = R.pipe
   (id) => (parseInt(id, 10) + 1).toString()
 )
 
-export default function Board(sources: Sources) {
+export default function Board(sources: Sources, 
+  stateUpdate$: Stream<BootstrapMessage>) {
   const {
     stream: noteEditStart$,
     handler: onNoteEditStart
@@ -75,18 +76,18 @@ export default function Board(sources: Sources) {
   const addNote$ = sources.DOM.select('.js-add-note')
     .events('click') as Stream<MouseEvent>
   
-  const addNoteMod$ = addNote$.mapTo((state: State) => {
-    const newId = getNextNoteId(state.notes)
+  // const addNoteMod$ = addNote$.mapTo((state: State) => {
+  //   const newId = getNextNoteId(state.notes)
     
-    const update = R.set(
-      R.lensPath(['notes', newId]),
-      { id: newId, pos: INITIAL_NOTE_POS, label: '' } as Note
-    )
+  //   const update = R.set(
+  //     R.lensPath(['notes', newId]),
+  //     { id: newId, pos: INITIAL_NOTE_POS, label: '' } as Note
+  //   )
     
-    return update(state)
-  })
+  //   return update(state)
+  // })
   
-  const noteDrag$ = noteMouseDown$.map(({ id }) => 
+  const noteDrag$: Stream<NoteEvent> = noteMouseDown$.map(({ id }) => 
     mouseMove$.map(e => ({
       id: id,
       x: e.clientX - 30,
@@ -132,10 +133,17 @@ export default function Board(sources: Sources) {
       R.assoc('boards', data.boards),
       R.assoc('notes', data.notes)
     ))
+    
+  const stateUpdateMod$ = stateUpdate$.map(newState => (state: State) => {
+    return R.pipe<State, State, State>(
+      R.assoc('boards', newState.boards),
+      R.assoc('notes', newState.notes)
+    )(state)
+  })
   
   const mod$ = Stream.merge(
-    noteDragMod$, addNoteMod$, noteEditStartMod$, noteSaveTextMod$,
-    serverBootstrapMod$
+    noteDragMod$, noteEditStartMod$, noteSaveTextMod$,
+    serverBootstrapMod$, stateUpdateMod$
   )
   
   const state$ = mod$.fold((state, mod) => mod(state), initialState)
@@ -149,6 +157,7 @@ export default function Board(sources: Sources) {
   return {
     DOM: view$,
     preventDefault: dragNoteEvent$,
-    websocket: Stream.empty()
+    moveNote$: noteDrag$.compose(debounce<NoteEvent>(500)),
+    addNote$: addNote$
   }
 }
