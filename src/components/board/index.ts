@@ -1,44 +1,17 @@
 import { Stream } from 'xstream'
 import dropRepeats from 'xstream/extra/dropRepeats'
 import debounce from 'xstream/extra/debounce'
-import { div, p, textarea, section, button, DOMSource } from '@cycle/dom'
-import isolate from '@cycle/isolate'
+import { DOMSource } from '@cycle/dom'
 import * as R from 'ramda'
 import createEventHandler from '../../util/create-event-handler'
-
-interface Board {
-  name: string
-}
-
-interface Position {
-  x: number
-  y: number
-}
-
-interface Note {
-  pos: Position
-  label: string
-  id: string
-}
-
-interface NoteMap {[id: string]: Note}
-
-interface State {
-  boards: {
-    [id: string]: Board
-  }
-  notes: NoteMap,
-  editingNodeId: string
-}
-
+import { WebsocketSource } from '../../drivers/websocket' 
+import { Board, Position, Note, NoteMap, BootstrapMessage, State, NoteEvent } 
+  from './types'
+import { view } from './view'
+  
 interface Sources { 
-  DOM: DOMSource 
-}
-
-interface NoteEvent {
-  id: string
-  x: number
-  y: number
+  DOM: DOMSource
+  websocket: WebsocketSource
 }
 
 const INITIAL_NOTE_POS = {
@@ -47,42 +20,10 @@ const INITIAL_NOTE_POS = {
 }
 
 const initialState : State = {
-  boards: {
-    0: { name: 'Winds' },
-    1: { name: 'Anchors' }, 
-    2: { name: 'Action Items' }
-  },
-  notes: {
-    1: {
-      pos: { x: 100, y: 100 }, 
-      label: 'Unidirectional Dataflow!', 
-      id: '1'
-    }
-  },
-  editingNodeId: null
+  boards: {},
+  notes: {},
+  editingNoteId: null
 }
-
-const boardStyle = {
-  'width': '800px',
-  'position': 'relative'
-}
-
-const columnStyle = {
-  'border-color': 'grey',
-  'flex-grow': '1',
-  'min-height': '400px',
-}
-
-const noteStyle = (note: Note) => ({
-  'width': '60px',
-  'height': '60px',
-  'position': 'absolute',
-  'cursor': 'pointer',
-  'top': '0px',
-  'left': '0px',
-  'background-color': 'white',
-  'transform': `translate3d(${note.pos.x}px, ${note.pos.y}px, 0px)`,
-})
 
 const getNextNoteId = R.pipe
   <NoteMap, Note[], string[], string[], string, string>(
@@ -93,11 +34,7 @@ const getNextNoteId = R.pipe
   (id) => (parseInt(id, 10) + 1).toString()
 )
 
-const stopPropagation = (e: MouseEvent) => {
-  e.stopPropagation()
-}
-
-function Board(sources: Sources) {
+export default function Board(sources: Sources) {
   const {
     stream: noteEditStart$,
     handler: onNoteEditStart
@@ -172,10 +109,10 @@ function Board(sources: Sources) {
   const noteEditId$ = Stream.merge(noteEditStart$, finishEdit$.mapTo(null))
   
   const noteEditStartMod$ = noteEditId$.map(id => (state: State) => {
-    if (state.editingNodeId === id) {
+    if (state.editingNoteId === id) {
       return state
     }
-    return R.assoc('editingNodeId', id, state) as State
+    return R.assoc('editingNoteId', id, state) as State
   })
   
   const noteSaveTextMod$ = noteSaveText$.map(({ noteId, text }) => 
@@ -187,63 +124,31 @@ function Board(sources: Sources) {
       return update(state)
     })
   
+  const serverBootstrap$ = sources.websocket.get('bootstrap')
+    .map((res: any) => res.data as BootstrapMessage).debug('bootstrap$')
+  
+  const serverBootstrapMod$ = 
+    serverBootstrap$.map(data => R.pipe<State, State, State>(
+      R.assoc('boards', data.boards),
+      R.assoc('notes', data.notes)
+    ))
+  
   const mod$ = Stream.merge(
-    noteDragMod$, addNoteMod$, noteEditStartMod$, noteSaveTextMod$
+    noteDragMod$, addNoteMod$, noteEditStartMod$, noteSaveTextMod$,
+    serverBootstrapMod$
   )
   
   const state$ = mod$.fold((state, mod) => mod(state), initialState)
     .compose(dropRepeats<State>())
     .debug('state$')
 
-  const view$ = state$.map(state => section('.js-container.p1', [ 
-    div('.clearfix.flex.mb1', 
-      { style: boardStyle }, 
-      R.values(state.boards).map(board => 
-        div('.p1.border-left.border.right.border-bottom.mx-auto', 
-          { style: columnStyle }, [ 
-          p('.center.m0', [ board.name ]) 
-        ])
-      )
-    ),
-    
-    div('.p1', [
-      button('.js-add-note', [ 'Add a note' ])
-    ]),
-    
-    ...R.values(state.notes).map(note => 
-      div('.js-note.border', { 
-        style: noteStyle(note),
-        attrs: { 'data-note': note.id },
-      }, [ 
-        state.editingNodeId === note.id ? 
-          textarea('.js-note-edit', { 
-            attrs: { autofocus: true, 'data-note': note.id },
-            props: { onclick: stopPropagation }
-          }, [note.label]) 
-        : 
-          div([
-            note.label,
-            button({
-              props: {
-                onmousedown: stopPropagation,
-                onclick: (e) => {
-                  e.stopPropagation()
-                  onNoteEditStart(note.id)
-                }  
-              }
-            }, [ 'edit' ])
-          ]),
-      ])
-    ) 
-      
-  ]))
+  const view$ = view(state$, onNoteEditStart)
   
   const dragNoteEvent$ = mouseMove$.map(e => noteDrag$.mapTo(e)).flatten()
   
   return {
     DOM: view$,
-    preventDefault: dragNoteEvent$
+    preventDefault: dragNoteEvent$,
+    websocket: Stream.empty()
   }
 }
-
-export default (sources: Sources) => isolate(Board)(sources)
