@@ -5,10 +5,11 @@ import { DOMSource } from '@cycle/dom'
 import * as R from 'ramda'
 import createEventHandler from '../../util/create-event-handler'
 import { WebsocketSource } from '../../drivers/websocket' 
-import { Position, Note, NoteMap, BootstrapMessage, State, NoteEvent } 
+import { Position, BootstrapMessage, State, NoteEvent } 
   from './types'
 import { view } from './view'
-  
+import { NOTE_HEIGHT, NOTE_WIDTH } from './constants'
+
 interface Sources { 
   DOM: DOMSource
   websocket: WebsocketSource
@@ -17,7 +18,8 @@ interface Sources {
 const initialState : State = {
   boards: {},
   notes: {},
-  editingNoteId: null
+  editingNoteId: null,
+  draggingNoteId: null,
 }
 
 export default function Board(sources: Sources, 
@@ -31,12 +33,10 @@ export default function Board(sources: Sources,
   
   const noteEditArea = container.select('.js-note-edit')
   
-  const noteMouseDown$: Stream<NoteEvent> = (container.select('.js-note')
+  const noteMouseDown$: Stream<{id: string}> = (container.select('.js-note')
     .events('mousedown') as Stream<MouseEvent>).map((e) => {
       return {
-        id: (e.currentTarget as Element).getAttribute('data-note'),
-        x: e.clientX,
-        y: e.clientY
+        id: (e.currentTarget as Element).getAttribute('data-note')
       }
     })
   
@@ -51,7 +51,7 @@ export default function Board(sources: Sources,
   const noteSaveText$ = noteEditBlur$
     .map(e => ({
       noteId: (e.target as HTMLTextAreaElement).getAttribute('data-note'),
-      text: (e.target as HTMLTextAreaElement).value
+      text: ((e.target as HTMLTextAreaElement).value || '').trim()
     }))
     .filter(({ noteId }) => noteId !== null && noteId.length > 0)
    
@@ -65,8 +65,8 @@ export default function Board(sources: Sources,
   const noteDrag$: Stream<NoteEvent> = noteMouseDown$.map(({ id }) => 
     mouseMove$.map(e => ({
       id: id,
-      x: e.clientX - 30,
-      y: e.clientY - 30
+      x: e.layerX - NOTE_WIDTH / 2,
+      y: e.layerY - NOTE_HEIGHT / 2
     }))
     .compose(dropRepeats((a: any, b: any) => 
       a.x === b.x && a.y === b.y
@@ -75,12 +75,19 @@ export default function Board(sources: Sources,
   ).flatten()
   
   const noteDragMod$ = noteDrag$.map(({ id, x, y }) => (state: State) => {
-    const update = R.set(
-      R.lensPath(['notes', id, 'pos']),
-      { x, y } as Position
+    const update = R.compose<State, State, State>(
+      R.set(
+        R.lensPath(['notes', id, 'pos']),
+        { x, y } as Position
+      ),
+      R.assoc('draggingNoteId', id)
     )
     return update(state)
   })
+  
+  const noteStopDraggingMod$: Stream<(state: State) => State> = mouseUp$.mapTo(
+    R.set(R.lensProp('draggingNoteId'), null)
+  )
   
   const noteEditId$ = Stream.merge(noteEditStart$, finishEdit$.mapTo(null))
   
@@ -117,7 +124,7 @@ export default function Board(sources: Sources,
   
   const mod$ = Stream.merge(
     noteDragMod$, noteEditStartMod$, noteSaveTextMod$,
-    serverBootstrapMod$, stateUpdateMod$
+    serverBootstrapMod$, stateUpdateMod$, noteStopDraggingMod$
   )
   
   const state$ = mod$.fold((state, mod) => mod(state), initialState)

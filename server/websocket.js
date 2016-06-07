@@ -16,8 +16,8 @@ const MOCK_DATA = {
 }
 
 const INITIAL_NOTE_POS = {
-  x: 115, 
-  y: 425
+  x: 140, 
+  y: 630
 }
 
 const getNextNoteId = R.pipe(

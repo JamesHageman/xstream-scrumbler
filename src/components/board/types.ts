@@ -24,6 +24,7 @@ export interface BootstrapMessage {
 
 export interface State extends BootstrapMessage {
   editingNoteId: string
+  draggingNoteId: string
 }
 
 export interface NoteEvent {
