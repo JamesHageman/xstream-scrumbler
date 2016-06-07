@@ -32,7 +32,11 @@ function main(sources: Sources): Sinks {
       type: 'move-note',
       data: noteEvent,
     })),
-    board.addNote$.mapTo({ type: 'add-note' })
+    board.addNote$.mapTo({ type: 'add-note' }),
+    board.editNote$.map(({ id, label }) => ({
+      type: 'change-note-label',
+      data: { id, label }
+    }))
   )
   
   return {

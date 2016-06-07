@@ -60,5 +60,14 @@ module.exports.controller = (io) => {
       
       applyUpdate(socket, update)
     })
+    
+    socket.on('change-note-label', ({ id, label }) => {
+      const update = R.set(
+        R.lensPath(['notes', id, 'label']),
+        label
+      )
+      
+      applyUpdate(socket, update)
+    })
   }
 }

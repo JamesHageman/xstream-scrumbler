@@ -14,25 +14,11 @@ interface Sources {
   websocket: WebsocketSource
 }
 
-const INITIAL_NOTE_POS = {
-  x: 115, 
-  y: 425
-}
-
 const initialState : State = {
   boards: {},
   notes: {},
   editingNoteId: null
 }
-
-const getNextNoteId = R.pipe
-  <NoteMap, Note[], string[], string[], string, string>(
-  R.values,
-  R.map<Note, string>(note => note.id),
-  R.sortBy(id => id),
-  R.last,
-  (id) => (parseInt(id, 10) + 1).toString()
-)
 
 export default function Board(sources: Sources, 
   stateUpdate$: Stream<BootstrapMessage>) {
@@ -76,17 +62,6 @@ export default function Board(sources: Sources,
   const addNote$ = sources.DOM.select('.js-add-note')
     .events('click') as Stream<MouseEvent>
   
-  // const addNoteMod$ = addNote$.mapTo((state: State) => {
-  //   const newId = getNextNoteId(state.notes)
-    
-  //   const update = R.set(
-  //     R.lensPath(['notes', newId]),
-  //     { id: newId, pos: INITIAL_NOTE_POS, label: '' } as Note
-  //   )
-    
-  //   return update(state)
-  // })
-  
   const noteDrag$: Stream<NoteEvent> = noteMouseDown$.map(({ id }) => 
     mouseMove$.map(e => ({
       id: id,
@@ -116,6 +91,13 @@ export default function Board(sources: Sources,
     return R.assoc('editingNoteId', id, state) as State
   })
   
+  const updateFromBootsrapMessage = (data: BootstrapMessage) => 
+    R.pipe<State, State, State>(
+      R.assoc('boards', data.boards),
+      R.assoc('notes', data.notes)
+    )
+  
+  // perform optimistic update
   const noteSaveTextMod$ = noteSaveText$.map(({ noteId, text }) => 
     (state: State) => {
       const update = R.set(
@@ -129,17 +111,9 @@ export default function Board(sources: Sources,
     .map((res: any) => res.data as BootstrapMessage).debug('bootstrap$')
   
   const serverBootstrapMod$ = 
-    serverBootstrap$.map(data => R.pipe<State, State, State>(
-      R.assoc('boards', data.boards),
-      R.assoc('notes', data.notes)
-    ))
+    serverBootstrap$.map(updateFromBootsrapMessage)
     
-  const stateUpdateMod$ = stateUpdate$.map(newState => (state: State) => {
-    return R.pipe<State, State, State>(
-      R.assoc('boards', newState.boards),
-      R.assoc('notes', newState.notes)
-    )(state)
-  })
+  const stateUpdateMod$ = stateUpdate$.map(updateFromBootsrapMessage)
   
   const mod$ = Stream.merge(
     noteDragMod$, noteEditStartMod$, noteSaveTextMod$,
@@ -158,6 +132,10 @@ export default function Board(sources: Sources,
     DOM: view$,
     preventDefault: dragNoteEvent$,
     moveNote$: noteDrag$.compose(debounce<NoteEvent>(500)),
-    addNote$: addNote$
+    addNote$: addNote$,
+    editNote$: noteSaveText$.map(({ noteId, text }) => ({
+      id: noteId,
+      label: text
+    }))
   }
 }
