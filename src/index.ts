@@ -5,16 +5,16 @@ import Board from './components/board'
 import { BootstrapMessage } from './components/board/types'
 import { Stream } from 'xstream'
 import isolate from '@cycle/isolate'
-import { 
-  createWebsocketDriver, 
-  WebsocketSource, 
-  EmitMessage 
-} from './drivers/websocket' 
+import {
+  createWebsocketDriver,
+  WebsocketSource,
+  EmitMessage
+} from './drivers/websocket'
 import { createFocusDriver } from './drivers/focus'
 
-interface Sources { 
-  DOM: DOMSource, 
-  websocket: WebsocketSource 
+interface Sources {
+  DOM: DOMSource,
+  websocket: WebsocketSource
 }
 
 interface Sinks {
@@ -28,7 +28,7 @@ function main(sources: Sources): Sinks {
   const stateUpdate$ = sources.websocket.get('state-update')
     .map(msg => msg.data as BootstrapMessage)
   const board = isolate(Board)(sources, stateUpdate$)
-  
+
   const boardWebsocket$ = Stream.merge(
     board.moveNote$.map(noteEvent => ({
       type: 'move-note',
@@ -44,7 +44,7 @@ function main(sources: Sources): Sinks {
       data: { id }
     }))
   )
-  
+
   return {
     DOM: board.DOM,
     websocket: Stream.merge(boardWebsocket$, Stream.of({ type: 'init' }))

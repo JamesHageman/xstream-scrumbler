@@ -1,6 +1,6 @@
 import { Stream } from 'xstream'
 import { State, Note } from './types'
-import { div, p, textarea, section, button } from '@cycle/dom'
+import { a, div, p, textarea, section, button } from '@cycle/dom'
 import { NOTE_HEIGHT, NOTE_WIDTH } from './constants'
 import * as R from 'ramda'
 
@@ -43,19 +43,19 @@ const stopPropagation = (e: MouseEvent) => {
   e.stopPropagation()
 }
 
-export const view = (state$: Stream<State>, 
+export const view = (state$: Stream<State>,
   onNoteEditStart: (val: string) => void) => {
-  return state$.map(state => section('.js-container.p1', [ 
-    div('.clearfix.flex.mb1', 
-      { style: boardStyle }, 
-      R.values(state.boards).map(board => 
-        div('.p1.border-left.border.right.border-bottom.mx-auto', 
-          { style: columnStyle, key: board.name }, [ 
-          p('.center.m0', [ board.name ]) 
+  return state$.map(state => section('.js-container.p1', [
+    div('.clearfix.flex.mb1',
+      { style: boardStyle },
+      R.values(state.boards).map(board =>
+        div('.p1.border-left.border.right.border-bottom.mx-auto',
+          { style: columnStyle, key: board.name }, [
+          p('.center.m0', [ board.name ])
         ])
       )
     ),
-    
+
     div('.p1', {
       style: {
         'min-height': '200px',
@@ -63,9 +63,9 @@ export const view = (state$: Stream<State>,
     }, [
       button('.js-add-note', [ 'Add a note' ])
     ]),
-    
-    ...R.values(state.notes).map(note => 
-      div('.js-note.border.flex', { 
+
+    ...R.values(state.notes).map(note =>
+      div('.js-note.border.flex', {
         style: R.mergeAll([
           noteStyle(note),
           note.id === state.draggingNoteId ? {
@@ -75,13 +75,13 @@ export const view = (state$: Stream<State>,
         attrs: { 'data-note': note.id },
         key: `note-${note.id}`
       }, [
-        state.editingNoteId === note.id ? 
+        state.editingNoteId === note.id ?
           textarea('.js-note-edit', {
             style: textAreaStyle,
             attrs: { 'data-note': note.id },
             props: { onclick: stopPropagation, }
-          }, [note.label]) 
-        : 
+          }, [note.label])
+        :
           div('.flex.flex-column', [
             div('.flex-auto', [ note.label ]),
             div('.flex.content-between', [
@@ -91,7 +91,7 @@ export const view = (state$: Stream<State>,
                   onclick: (e) => {
                     e.stopPropagation()
                     onNoteEditStart(note.id)
-                  }  
+                  }
                 }
               }, [ 'edit' ]),
               button('.js-delete-note', {
@@ -101,11 +101,11 @@ export const view = (state$: Stream<State>,
                 props: {
                   onmousedown: stopPropagation,
                 }
-              }, [ 'x' ])  
+              }, [ 'x' ])
             ])
           ]),
       ])
-    ) 
-      
+    )
+
   ]))
 }
