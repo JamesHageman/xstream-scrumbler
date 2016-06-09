@@ -1,6 +1,7 @@
 import { Stream } from 'xstream'
 import dropRepeats from 'xstream/extra/dropRepeats'
 import debounce from 'xstream/extra/debounce'
+import delay from 'xstream/extra/delay'
 import { DOMSource } from '@cycle/dom'
 import * as R from 'ramda'
 import createEventHandler from '../../util/create-event-handler'
@@ -30,6 +31,10 @@ export default function Board(sources: Sources,
   } = createEventHandler<string>()
   
   const container = sources.DOM.select('.js-container')
+  
+  const noteDelete$: Stream<string> = container.select('.js-delete-note')
+    .events('click')
+    .map(e => (e.target as HTMLButtonElement).getAttribute('data-note'))
   
   const noteEditArea = container.select('.js-note-edit')
   
@@ -138,11 +143,13 @@ export default function Board(sources: Sources,
   return {
     DOM: view$,
     preventDefault: dragNoteEvent$,
-    moveNote$: noteDrag$.compose(debounce<NoteEvent>(500)),
+    moveNote$: noteDrag$.compose(debounce<NoteEvent>(100)),
     addNote$: addNote$,
     editNote$: noteSaveText$.map(({ noteId, text }) => ({
       id: noteId,
       label: text
-    }))
+    })),
+    noteDelete$: noteDelete$,
+    focus: noteEditStart$.compose(delay(50)).mapTo('textarea'),
   }
 }

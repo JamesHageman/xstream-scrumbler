@@ -10,6 +10,7 @@ import {
   WebsocketSource, 
   EmitMessage 
 } from './drivers/websocket' 
+import { createFocusDriver } from './drivers/focus'
 
 interface Sources { 
   DOM: DOMSource, 
@@ -20,6 +21,7 @@ interface Sinks {
   DOM: Stream<VNode>
   websocket: Stream<EmitMessage>
   preventDefault: Stream<Event>
+  focus: Stream<string>
 }
 
 function main(sources: Sources): Sinks {
@@ -36,6 +38,10 @@ function main(sources: Sources): Sinks {
     board.editNote$.map(({ id, label }) => ({
       type: 'change-note-label',
       data: { id, label }
+    })),
+    board.noteDelete$.map(id => ({
+      type: 'delete-note',
+      data: { id }
     }))
   )
   
@@ -43,13 +49,15 @@ function main(sources: Sources): Sinks {
     DOM: board.DOM,
     websocket: Stream.merge(boardWebsocket$, Stream.of({ type: 'init' }))
       .debug('websocket$'),
-    preventDefault: board.preventDefault
+    preventDefault: board.preventDefault,
+    focus: board.focus,
   }
 }
 
 Cycle.run(main, {
   DOM: makeDOMDriver('#root'),
   websocket: createWebsocketDriver('http://localhost:3000'),
+  focus: createFocusDriver(),
   preventDefault: (event$: Stream<Event>) => {
     event$.addListener({
       next: (e) => e.preventDefault(),

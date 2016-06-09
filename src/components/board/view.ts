@@ -78,21 +78,31 @@ export const view = (state$: Stream<State>,
         state.editingNoteId === note.id ? 
           textarea('.js-note-edit', {
             style: textAreaStyle,
-            attrs: { autofocus: true, tabindex: 0, 'data-note': note.id },
+            attrs: { 'data-note': note.id },
             props: { onclick: stopPropagation, }
           }, [note.label]) 
         : 
-          div([
-            note.label,
-            button({
-              props: {
-                onmousedown: stopPropagation,
-                onclick: (e) => {
-                  e.stopPropagation()
-                  onNoteEditStart(note.id)
-                }  
-              }
-            }, [ 'edit' ])
+          div('.flex.flex-column', [
+            div('.flex-auto', [ note.label ]),
+            div('.flex.content-between', [
+              button({
+                props: {
+                  onmousedown: stopPropagation,
+                  onclick: (e) => {
+                    e.stopPropagation()
+                    onNoteEditStart(note.id)
+                  }  
+                }
+              }, [ 'edit' ]),
+              button('.js-delete-note', {
+                attrs: {
+                  'data-note': note.id,
+                },
+                props: {
+                  onmousedown: stopPropagation,
+                }
+              }, [ 'x' ])  
+            ])
           ]),
       ])
     ) 

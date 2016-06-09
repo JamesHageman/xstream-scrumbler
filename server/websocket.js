@@ -23,9 +23,9 @@ const INITIAL_NOTE_POS = {
 const getNextNoteId = R.pipe(
   R.values,
   R.map(note => note.id),
-  R.sortBy(id => id),
+  R.sortBy(id => parseInt(id, 10)),
   R.last,
-  (id) => (parseInt(id, 10) + 1).toString()
+  (id) => (id + 1).toString()
 )
 
 module.exports.controller = (io) => {
@@ -51,7 +51,7 @@ module.exports.controller = (io) => {
     })
     
     socket.on('add-note', () => {
-      const newId = getNextNoteId(state.notes)
+      const newId = R.keys(state.notes).length > 0 ? getNextNoteId(state.notes) : '0';
     
       const update = R.set(
         R.lensPath(['notes', newId]),
@@ -68,6 +68,15 @@ module.exports.controller = (io) => {
       )
       
       applyUpdate(socket, update)
+    })
+    
+    socket.on('delete-note', ({ id }) => {
+      const update = R.over(
+        R.lensProp('notes'),
+        R.omit([ id ])
+      )
+      
+      applyUpdate(socket, update);
     })
   }
 }
